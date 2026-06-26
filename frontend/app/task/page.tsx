@@ -1,17 +1,26 @@
 'use client';
 import { useState, useEffect } from 'react';
+import { supabase } from '../lib/supabase';
+import { getExperimentStats } from '../lib/analytics';
 
 export default function TaskPage() {
   const [step, setStep] = useState(1); // 1: Answer, 2: Confidence, 3: Feedback
   const [answer, setAnswer] = useState('');
   const [confidence, setConfidence] = useState(3);
   const [isCorrect, setIsCorrect] = useState<boolean | null>(null);
- 
+ const runAnalyticsCheck = async () => {
+    const stats = await getExperimentStats();
+    console.log("📊 Research Insights Bundle:", stats);
+    alert("Backend Analytics Operational! Check your console for the stats.");
+  };
+
   // Day 10: Timing State
   const [startTime, setStartTime] = useState<number>(0);
   const [finalTime, setFinalTime] = useState<number>(0);
 
   const currentQuestion = {
+    category: "Cognitive Reflection",
+    difficulty: "Easy",
     text: "A bat and a ball cost $1.10 in total. The bat costs $1.00 more than the ball. How much does the ball cost?",
     correct_answer: "0.05"
   };
@@ -33,21 +42,46 @@ export default function TaskPage() {
     setStep(2); // Move to Confidence Slider
   };
 
-  const handleConfidenceSubmit = () => {
-    // DATA BUNDLE READY FOR DAY 12:
-    // { answer, isCorrect, confidence, response_time: finalTime }
-    setStep(3);
+const handleConfidenceSubmit = async () => {
+    // Day 12: Live Data Validation & Submission
+    try {
+      const { data, error } = await supabase
+        .from('responses')
+        .insert([
+          {
+            question_id: 1, // Linking to our CRT question
+            response_text: answer,
+            is_correct: isCorrect,
+            confidence: confidence,
+            response_time: finalTime
+          }
+        ]);
+
+      if (error) throw error;
+      console.log("Data successfully validated and stored!");
+      setStep(3); // Move to Feedback
+    } catch (error) {
+      console.error("Error saving data:", error);
+      alert("Validation Error: Could not save your response. Please try again.");
+    }
   };
 
   return (
     <main className="p-24 max-w-2xl mx-auto">
       <h1 className="text-4xl font-bold text-purple-600 mb-8 font-serif italic">ReasonLab</h1>
-
+{/* Day 11: Question Metadata Badges */}
+<div className="flex gap-2 mb-6">
+  <span className="bg-purple-100 text-purple-700 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-tighter border border-purple-200">
+    {currentQuestion.category}
+  </span>
+  <span className="bg-gray-100 text-gray-600 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-tighter border border-gray-200">
+    {currentQuestion.difficulty}
+  </span>
+</div>
       <div className="bg-white p-10 rounded-3xl shadow-2xl border-2 border-purple-50">
        
         {step === 1 && (
           <form onSubmit={handleAnswerSubmit} className="space-y-6">
-            <h2 className="text-sm font-bold text-purple-400 uppercase tracking-widest">Logic Task</h2>
             <p className="text-2xl text-gray-800 leading-relaxed font-medium">{currentQuestion.text}</p>
             <input
               type="text"
@@ -94,6 +128,9 @@ export default function TaskPage() {
             </button>
           </div>
         )}
+<button onClick={runAnalyticsCheck} className="mt-8 text-xs text-purple-300 hover:text-purple-600 transition-colors">
+  Data Scientist: Run Analytics Engine
+</button>
       </div>
     </main>
   );
