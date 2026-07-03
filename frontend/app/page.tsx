@@ -1,16 +1,19 @@
-export default function LandingPage() {
+'use client';
+import Link from 'next/link';
+
+export default function HomePage() {
   return (
-    <main className="flex flex-col items-center justify-center min-h-screen">
-      <h1 className="text-6xl font-bold text-purple-800 italic">ReasonLab</h1>
-      <p className="mt-4 text-2xl text-gray-700">Mapping the Curiosity Graph</p>
-      <div className="mt-12 space-x-6">
-        <a href="/task" className="bg-purple-600 hover:bg-purple-700 text-white px-8 py-3 rounded-xl text-lg font-semibold transition-all">
-          Start Task
-        </a>
-        <a href="/dashboard" className="border-2 border-purple-600 text-purple-600 hover:bg-purple-50 px-8 py-3 rounded-xl text-lg font-semibold transition-all">
-          View Data
-        </a>
-      </div>
+    <main className="min-h-screen flex flex-col items-center justify-center bg-gray-50 p-6 text-center">
+      <h1 className="text-6xl font-bold text-gray-900 mb-4 font-serif italic">ReasonLab</h1>
+      <p className="text-xl text-gray-600 mb-12 max-w-2xl">
+        Mapping the architecture of human cognition through logic, confidence, and curiosity.
+      </p>
+      <Link
+        href="/task"
+        className="bg-purple-600 text-white px-12 py-5 rounded-2xl font-black text-xl shadow-2xl hover:bg-purple-700 transition-all active:scale-95"
+      >
+        Enter the Research Lab →
+      </Link>
     </main>
-  )
+  );
 }

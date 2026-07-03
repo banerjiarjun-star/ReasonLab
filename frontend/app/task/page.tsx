@@ -1,137 +1,101 @@
 'use client';
 import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
-import { getExperimentStats } from '../lib/analytics';
 
-export default function TaskPage() {
-  const [step, setStep] = useState(1); // 1: Answer, 2: Confidence, 3: Feedback
-  const [answer, setAnswer] = useState('');
+const REASONING_TASKS = [
+  { id: 1, question: "If all Bloops are Rips and all Rips are Zips, are all Bloops definitely Zips?", options: ["Yes", "No", "Maybe"], correct: "Yes", category: "Logic", curiosityLinks: ["Logic Chains", "Syllogisms"] },
+  { id: 2, question: "A bat and a ball cost $1.10 in total. The bat costs $1.00 more than the ball. How much does the ball cost?", options: ["$0.10", "$0.05", "$0.01"], correct: "$0.05", category: "Cognitive Reflection", curiosityLinks: ["Intuitive Errors", "Math Logic"] },
+  { id: 3, question: "In a race, you pass the person in second place. What place are you in now?", options: ["1st", "2nd", "3rd"], correct: "2nd", category: "Cognitive Reflection", curiosityLinks: ["Spatial Logic", "Quick Thinking"] },
+  { id: 4, question: "If you flip a fair coin 3 times and get Heads every time, what is the chance the next flip is Tails?", options: ["50%", "75%", "100%"], correct: "50%", category: "Probability", curiosityLinks: ["Gambler's Fallacy", "Independence"] },
+  { id: 5, question: "Which number comes next: 2, 4, 8, 16, ...?", options: ["20", "24", "32"], correct: "32", category: "Pattern Recognition", curiosityLinks: ["Binary Growth", "Sequences"] },
+  { id: 6, question: "All roses are flowers. Some flowers fade quickly. Does it follow that some roses fade quickly?", options: ["Yes", "No", "Not necessarily"], correct: "No", category: "Logic", curiosityLinks: ["Logical Validity", "Venn Diagrams"] },
+  { id: 7, question: "Sally has 3 brothers. Each brother has 2 sisters. How many sisters does Sally have?", options: ["1", "2", "3"], correct: "1", category: "Logic", curiosityLinks: ["Family Trees", "Set Theory"] },
+  { id: 8, question: "A lake has lily pads that double in size every day. It takes 48 days to cover the lake. How long for half the lake?", options: ["24 days", "47 days", "48 days"], correct: "47 days", category: "Cognitive Reflection", curiosityLinks: ["Exponential Growth", "Time Scales"] },
+  { id: 9, question: "If 5 machines take 5 minutes to make 5 widgets, how long would 100 machines take to make 100 widgets?", options: ["5 minutes", "100 minutes", "500 minutes"], correct: "5 minutes", category: "Cognitive Reflection", curiosityLinks: ["Rate Logic", "Scaling"] },
+  { id: 10, question: "What is more likely: rolling a 6 on a die, or flipping two heads in a row on a coin?", options: ["Rolling a 6", "Two heads", "Equally likely"], correct: "Two heads", category: "Probability", curiosityLinks: ["Joint Probability", "Dice vs Coins"] }
+];
+
+export default function QuestionEngine() {
+  const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
+  const [selectedAnswer, setSelectedAnswer] = useState<string | null>(null);
   const [confidence, setConfidence] = useState(3);
-  const [isCorrect, setIsCorrect] = useState<boolean | null>(null);
- const runAnalyticsCheck = async () => {
-    const stats = await getExperimentStats();
-    console.log("📊 Research Insights Bundle:", stats);
-    alert("Backend Analytics Operational! Check your console for the stats.");
-  };
+  const [showFeedback, setShowFeedback] = useState(false);
+  const [startTime, setStartTime] = useState(Date.now());
+  const [participantId, setParticipantId] = useState<string | null>(null);
 
-  // Day 10: Timing State
-  const [startTime, setStartTime] = useState<number>(0);
-  const [finalTime, setFinalTime] = useState<number>(0);
-
-  const currentQuestion = {
-    category: "Cognitive Reflection",
-    difficulty: "Easy",
-    text: "A bat and a ball cost $1.10 in total. The bat costs $1.00 more than the ball. How much does the ball cost?",
-    correct_answer: "0.05"
-  };
-
-  // Start the timer as soon as the page loads
   useEffect(() => {
-    setStartTime(Date.now());
+    let id = localStorage.getItem('reasonlab_id');
+    if (!id) {
+      id = 'user_' + Math.random().toString(36).substr(2, 9);
+      localStorage.setItem('reasonlab_id', id);
+    }
+    setParticipantId(id);
   }, []);
 
-  const handleAnswerSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-   
-    // Stop the timer
-    const endTime = Date.now();
-    const durationInSeconds = (endTime - startTime) / 1000;
-    setFinalTime(durationInSeconds);
+  const currentQuestion = REASONING_TASKS[currentQuestionIndex];
 
-    setIsCorrect(answer.trim() === currentQuestion.correct_answer);
-    setStep(2); // Move to Confidence Slider
+  const handleNextQuestion = () => {
+    if (currentQuestionIndex < REASONING_TASKS.length - 1) {
+      setCurrentQuestionIndex((prev) => prev + 1);
+      setSelectedAnswer(null); setConfidence(3); setShowFeedback(false); setStartTime(Date.now());
+    } else {
+      window.location.href = '/dashboard';
+    }
   };
 
-const handleConfidenceSubmit = async () => {
-    // Day 12: Live Data Validation & Submission
-    try {
-      const { data, error } = await supabase
-        .from('responses')
-        .insert([
-          {
-            question_id: 1, // Linking to our CRT question
-            response_text: answer,
-            is_correct: isCorrect,
-            confidence: confidence,
-            response_time: finalTime
-          }
-        ]);
+  const handleSubmit = async () => {
+    const responseTime = (Date.now() - startTime) / 1000;
+    const isCorrect = selectedAnswer === currentQuestion.correct;
 
-      if (error) throw error;
-      console.log("Data successfully validated and stored!");
-      setStep(3); // Move to Feedback
-    } catch (error) {
-      console.error("Error saving data:", error);
-      alert("Validation Error: Could not save your response. Please try again.");
+    // THE MASTER ALIGNMENT: These labels MUST match your Supabase columns exactly
+    const { error } = await supabase
+      .from('responses')
+      .insert([
+        {
+          participant_id: participantId,
+          question_id: currentQuestion.id,
+          response_text: selectedAnswer,
+          is_correct: isCorrect,          
+          confidence: confidence, // Updated to your confirmed label 'confidence'
+          response_time: responseTime      
+        }
+      ]);
+
+    if (error) {
+      console.error("Critical Save Error:", error);
+      alert("Database error: Check your console (Right-click > Inspect > Console)");
+    } else {
+      setShowFeedback(true);
     }
   };
 
   return (
-    <main className="p-24 max-w-2xl mx-auto">
-      <h1 className="text-4xl font-bold text-purple-600 mb-8 font-serif italic">ReasonLab</h1>
-{/* Day 11: Question Metadata Badges */}
-<div className="flex gap-2 mb-6">
-  <span className="bg-purple-100 text-purple-700 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-tighter border border-purple-200">
-    {currentQuestion.category}
-  </span>
-  <span className="bg-gray-100 text-gray-600 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-tighter border border-gray-200">
-    {currentQuestion.difficulty}
-  </span>
-</div>
-      <div className="bg-white p-10 rounded-3xl shadow-2xl border-2 border-purple-50">
-       
-        {step === 1 && (
-          <form onSubmit={handleAnswerSubmit} className="space-y-6">
-            <p className="text-2xl text-gray-800 leading-relaxed font-medium">{currentQuestion.text}</p>
-            <input
-              type="text"
-              value={answer}
-              onChange={(e) => setAnswer(e.target.value)}
-              placeholder="Type your answer..."
-              className="w-full p-5 border-2 border-gray-100 rounded-2xl focus:border-purple-500 outline-none text-xl"
-              required
-            />
-            <button type="submit" className="w-full bg-purple-600 text-white py-5 rounded-2xl font-bold text-xl hover:bg-purple-700">
-              Submit Answer
-            </button>
-          </form>
-        )}
-
-        {step === 2 && (
-          <div className="space-y-10 text-center py-4">
-            <h2 className="text-3xl font-bold text-gray-800">How sure are you?</h2>
-            <input
-              type="range" min="1" max="5" step="1"
-              value={confidence}
-              onChange={(e) => setConfidence(parseInt(e.target.value))}
-              className="w-full h-4 bg-purple-100 rounded-lg appearance-none cursor-pointer accent-purple-600"
-            />
-            <div className="flex justify-between font-black text-2xl text-purple-800 px-2">
-              <span>1</span><span>2</span><span>3</span><span>4</span><span>5</span>
-            </div>
-            <button onClick={handleConfidenceSubmit} className="w-full bg-purple-600 text-white py-5 rounded-2xl font-bold text-xl hover:bg-purple-700">
-              Confirm My Confidence
-            </button>
-          </div>
-        )}
-
-        {step === 3 && (
-          <div className="space-y-8 text-center">
-            <div className={`p-10 rounded-3xl border-4 ${isCorrect ? 'bg-green-50 border-green-200 text-green-800' : 'bg-red-50 border-red-200 text-red-800'}`}>
-              <p className="text-4xl font-black mb-4">{isCorrect ? "✅ SUCCESS" : "❌ INCORRECT"}</p>
-              <p className="text-xl font-medium mb-2">Confidence: **{confidence}/5**</p>
-              {/* Day 10 Display */}
-              <p className="text-lg text-gray-600 italic">Thinking Time: **{finalTime.toFixed(2)} seconds**</p>
-            </div>
-            <button onClick={() => window.location.reload()} className="text-purple-600 font-bold text-lg hover:underline">
-              Try Another Challenge
-            </button>
-          </div>
-        )}
-<button onClick={runAnalyticsCheck} className="mt-8 text-xs text-purple-300 hover:text-purple-600 transition-colors">
-  Data Scientist: Run Analytics Engine
-</button>
+    <main className="p-8 max-w-4xl mx-auto bg-gray-50 min-h-screen">
+      <div className="mb-8">
+        <p className="text-purple-600 font-bold uppercase tracking-widest text-sm">Challenge {currentQuestionIndex + 1} of 10</p>
+        <h2 className="text-3xl font-bold text-gray-900 mt-2">{currentQuestion.question}</h2>
       </div>
+      <div className="space-y-4 mb-8">
+        {currentQuestion.options.map((opt) => (
+          <button key={opt} onClick={() => !showFeedback && setSelectedAnswer(opt)} disabled={showFeedback} className={`w-full p-6 rounded-2xl text-left font-bold transition-all border-4 ${selectedAnswer === opt ? 'border-purple-500 bg-purple-50' : 'border-white bg-white'}`}>
+            {opt}
+          </button>
+        ))}
+      </div>
+      {!showFeedback && selectedAnswer && (
+        <div className="bg-white p-8 rounded-3xl shadow-sm border border-gray-100 mb-8 animate-in fade-in zoom-in duration-300">
+          <p className="font-bold text-gray-700 mb-4">How sure are you? (1=Guessing, 5=Certain)</p>
+          <input type="range" min="1" max="5" step="1" value={confidence} onChange={(e) => setConfidence(parseInt(e.target.value))} className="w-full h-2 bg-purple-100 rounded-lg appearance-none cursor-pointer accent-purple-600" />
+          <div className="flex justify-between mt-2 font-bold text-gray-300"><span>1</span><span>2</span><span>3</span><span>4</span><span>5</span></div>
+          <button onClick={handleSubmit} className="mt-8 w-full bg-purple-600 text-white py-4 rounded-2xl font-black text-lg shadow-lg">Confirm Answer</button>
+        </div>
+      )}
+      {showFeedback && (
+        <div className="bg-white border-4 border-purple-200 p-8 rounded-3xl shadow-xl">
+          <p className={`text-2xl font-black mb-2 ${selectedAnswer === currentQuestion.correct ? 'text-green-600' : 'text-red-500'}`}>{selectedAnswer === currentQuestion.correct ? "✅ Correct!" : "❌ Not Quite."}</p>
+          <button onClick={handleNextQuestion} className="mt-4 p-4 bg-purple-600 text-white rounded-xl font-bold w-full">Next Challenge →</button>
+        </div>
+      )}
     </main>
   );
 }
