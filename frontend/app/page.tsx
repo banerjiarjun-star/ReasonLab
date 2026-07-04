@@ -4,7 +4,7 @@ import Link from 'next/link';
 export default function HomePage() {
   return (
     <main className="min-h-screen flex flex-col items-center justify-center bg-gray-50 p-6 text-center">
-      <h1 className="text-6xl font-bold text-gray-900 mb-4 font-serif italic">ReasonLab</h1>
+      <h1 className="text-6xl font-bold text-black mb-4 font-serif italic">ReasonLab</h1>
       <p className="text-xl text-gray-600 mb-12 max-w-2xl">
         Mapping the architecture of human cognition through logic, confidence, and curiosity.
       </p>
