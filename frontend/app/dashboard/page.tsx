@@ -1,97 +1,106 @@
 'use client';
-import { useState, useEffect } from 'react';
-import { getExperimentStats } from '../lib/analytics';
-import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
-  ResponsiveContainer, Cell, LineChart, Line, Legend,
-  ComposedChart, Area
-} from 'recharts';
 
-export default function DashboardPage() {
-  const [stats, setStats] = useState<any[]>([]);
+import { useState, useEffect } from 'react';
+import { supabase } from '../lib/supabase';
+
+export default function ResearchDashboard() {
+  const [stats, setStats] = useState({ totalTasks: 0, accuracy: '0.0', avgConfidence: 0, avgTime: '0.0' });
+  const [performanceData, setPerformanceData] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    async function loadData() {
-      const data = await getExperimentStats();
-      if (data) setStats(data);
+    const fetchStats = async () => {
+      setLoading(true);
+      const { data, error } = await supabase.from('responses').select('question_id, is_correct, confidence, response_time').order('question_id', { ascending: true });
+
+      if (data && (data as any[]).length > 0) {
+        const res = data as any[];
+        let correctCount = 0, confSum = 0, timeSum = 0;
+
+        for (let i = 0; i < res.length; i++) {
+          if (res[i].is_correct === true) correctCount++;
+          confSum += (res[i].confidence || 0);
+          timeSum += (res[i].response_time || 0);
+        }
+
+        setStats({
+          totalTasks: res.length,
+          accuracy: ((correctCount / res.length) * 100).toFixed(1),
+          avgConfidence: parseFloat((confSum / res.length).toFixed(1)),
+          avgTime: (timeSum / res.length).toFixed(2)
+        });
+
+        // AGGREGATE CHART LOGIC: Calculates % correct for each Question ID (1-20)
+        // Ratio logic: 1/1 = 100%, 1/2 = 50%, 1/3 = 33.3% [Our conversation]
+        const chartRows = [];
+        for (let i = 1; i <= 20; i++) {
+          const taskRes = res.filter((r: any) => r.question_id === i);
+          const totalForTask = taskRes.length;
+          const correctForTask = taskRes.filter((r: any) => r.is_correct === true).length;
+          const taskAcc = totalForTask > 0 ? (correctForTask / totalForTask) * 100 : 0;
+          chartRows.push({ name: `${i}`, accuracy: taskAcc });
+        }
+        setPerformanceData(chartRows);
+      }
       setLoading(false);
-    }
-    loadData();
+    };
+    fetchStats();
   }, []);
 
-  if (loading) return <div className="p-24 text-center text-purple-600 font-bold animate-pulse">Analyzing Behavioral Patterns...</div>;
+  const yLabels = ['100%', '80%', '60%', '40%', '20%', '0%'];
 
   return (
-    <main className="p-12 max-w-7xl mx-auto bg-gray-50 min-h-screen">
-      <header className="mb-12">
-        <h1 className="text-5xl font-bold text-gray-900 font-serif italic mb-2">ReasonLab Analytics</h1>
-        <p className="text-gray-500 uppercase tracking-widest text-sm font-bold">Phase 3: Behavioral Research Insights</p>
-      </header>
+    <main className="min-h-screen bg-white p-8 text-black">
+      <div className="max-w-6xl mx-auto">
+        <header className="mb-10 border-b-[10px] border-black pb-6 flex justify-between items-end">
+          <h1 className="text-6xl font-black uppercase tracking-tighter">Research Dashboard</h1>
+          <button onClick={() => window.location.href = '/'} className="px-6 py-3 bg-black text-white font-black border-4 border-black hover:bg-white hover:text-black transition-all">Back to Lab</button>
+        </header>
 
-      {/* TOP LEVEL METRICS */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
-        <div className="bg-white p-8 rounded-2xl shadow-sm border-l-8 border-purple-500">
-          <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-1">Total Dataset</p>
-          <p className="text-4xl font-black text-gray-800">{stats.reduce((acc, curr) => acc + curr.total_responses, 0)} <span className="text-lg font-normal text-gray-400">Responses</span></p>
-        </div>
-        <div className="bg-white p-8 rounded-2xl shadow-sm border-l-8 border-green-500">
-          <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-1">Global Accuracy</p>
-          <p className="text-4xl font-black text-gray-800">
-            {(stats.reduce((acc, curr) => acc + curr.accuracy_rate, 0) / stats.length || 0).toFixed(1)}%
-          </p>
-        </div>
-        <div className="bg-white p-8 rounded-2xl shadow-sm border-l-8 border-blue-500">
-          <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-1">Avg. Latency</p>
-          <p className="text-4xl font-black text-gray-800">
-            {(stats.reduce((acc, curr) => acc + curr.avg_response_time, 0) / stats.length || 0).toFixed(2)}s
-          </p>
-        </div>
-      </div>
+        {loading ? ( <div className="text-4xl font-black animate-pulse text-center py-20">SYNCING DATA...</div> ) : (
+          <>
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-10">
+              {[ {l:'TOTAL', v:stats.totalTasks}, {l:'ACCURACY', v:stats.accuracy+'%'}, {l:'CONF', v:stats.avgConfidence}, {l:'AVG. TIME', v:stats.avgTime+'s'} ].map((s) => (
+                <div key={s.l} className="border-[6px] border-black p-6 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] bg-white">
+                  <h2 className="text-xl font-black uppercase">{s.l}</h2>
+                  <p className="text-5xl font-black">{s.v}</p>
+                </div>
+              ))}
+            </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-       
-        {/* CHART 1: ACCURACY VS CONFIDENCE (Calibration) */}
-        <div className="bg-white p-10 rounded-3xl shadow-xl border border-gray-100">
-          <h2 className="text-2xl font-bold text-gray-800 mb-6">Metacognitive Calibration</h2>
-          <p className="text-sm text-gray-500 mb-8 italic">Comparing how sure people feel vs. how right they actually are.</p>
-          <div className="h-80 w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <ComposedChart data={stats}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
-                <XAxis dataKey="question_id" label={{ value: 'Question', position: 'insideBottom', offset: -5 }} />
-                <YAxis yAxisId="left" domain={[6]} label={{ value: 'Accuracy %', angle: -90, position: 'insideLeft' }} />
-                <YAxis yAxisId="right" orientation="right" domain={[7]} label={{ value: 'Confidence (1-5)', angle: 90, position: 'insideRight' }} />
-                <Tooltip />
-                <Legend />
-                <Bar yAxisId="left" dataKey="accuracy_rate" fill="#9333ea" radius={[10, 10, 0, 0]} name="Accuracy (%)" />
-                <Line yAxisId="right" type="monotone" dataKey="avg_confidence" stroke="#ef4444" strokeWidth={4} dot={{ r: 6 }} name="Confidence Score" />
-              </ComposedChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-
-        {/* CHART 2: COGNITIVE EFFORT (Response Time) */}
-        <div className="bg-white p-10 rounded-3xl shadow-xl border border-gray-100">
-          <h2 className="text-2xl font-bold text-gray-800 mb-6">Cognitive Effort per Task</h2>
-          <p className="text-sm text-gray-500 mb-8 italic">Average time (seconds) spent processing each logic challenge.</p>
-          <div className="h-80 w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={stats} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
-                <XAxis dataKey="question_id" />
-                <YAxis label={{ value: 'Seconds', angle: -90, position: 'insideLeft' }} />
-                <Tooltip />
-                <Area type="monotone" dataKey="avg_response_time" stroke="#3b82f6" fill="#dbeafe" strokeWidth={3} name="Processing Time" />
-              </AreaChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-
+            {/* PERFORMANCE CHART: Professional Bar Chart UI */}
+            <div className="border-[6px] border-black p-8 shadow-[12px_12px_0px_0px_rgba(0,0,0,1)] bg-white">
+              <h2 className="text-3xl font-black uppercase mb-10 border-b-4 border-black pb-2">Global Performance Profile (Tasks 1-20)</h2>
+              <div className="flex h-[400px]">
+                {/* Y-Axis Labels */}
+                <div className="flex flex-col justify-between pr-6 pb-12 text-[12px] font-black text-gray-500 uppercase">
+                  {yLabels.map(l => <span key={l}>{l}</span>)}
+                </div>
+               
+                {/* Bar Area with Background Grid */}
+                <div className="flex-1 flex items-end justify-between border-l-[6px] border-b-[6px] border-black pb-4 px-4 gap-2 relative bg-[linear-gradient(to_top,#f1f5f9_1px,transparent_1px)] bg-[length:100%_20%]">
+                  {performanceData.map((t) => (
+                    <div key={t.name} className="flex-1 flex flex-col items-center group relative h-full justify-end">
+                      {/* TOOLTIP ON HOVER */}
+                      <div className="absolute -top-10 bg-black text-white text-[10px] px-2 py-1 font-black opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-10 uppercase">
+                        Acc: {Math.round(t.accuracy)}%
+                      </div>
+                      {/* THE BAR */}
+                      <div
+                        className="w-full bg-black transition-all duration-500 group-hover:bg-blue-600 border-x-2 border-white"
+                        style={{ height: `${t.accuracy}%`, minHeight: '2px' }}
+                      ></div>
+                      {/* X-AXIS LABEL */}
+                      <span className="absolute -bottom-10 text-[10px] font-black">{t.name}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div className="mt-14 text-center font-black uppercase text-sm tracking-widest text-gray-400">Numerical Question Sequence</div>
+            </div>
+          </>
+        )}
       </div>
     </main>
   );
 }
-
-// Helper to make AreaChart work since it was missing from original import
-import { AreaChart } from 'recharts';
